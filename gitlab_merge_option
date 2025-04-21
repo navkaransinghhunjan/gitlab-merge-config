@@ -1,0 +1,37 @@
+read -s -p "Enter your GitLab Personal Access Token: " TOKEN
+echo
+if [[ -z "$TOKEN" ]]; then
+  echo "❗️ Token cannot be empty."
+  exit 1
+fi
+GITLAB_API="https://gitlab.example.com/api/v4"
+PER_PAGE=100
+PAGE=1
+
+while :; do
+  # Fetch a page of projects
+  PROJS=$(curl -s \
+    --header "PRIVATE-TOKEN: $TOKEN" \
+    "$GITLAB_API/projects?simple=true&per_page=$PER_PAGE&page=$PAGE")
+
+  # Extract project IDs
+  IDS=$(echo "$PROJS" | jq '.[].id')
+
+  # Stop when no more projects
+  [[ -z "$IDS" ]] && break
+
+  for ID in $IDS; do
+    echo "Configuring project $ID…"
+    curl -s --show-error --fail --request PUT \
+      --header "PRIVATE-TOKEN: $TOKEN" \
+      --data-urlencode "merge_method=ff" \
+      --data-urlencode "squash_option=default_on" \
+      --data-urlencode $'squash_commit_template=%{title}\n\n%{description}\n\nSee merge request !%{reference}' \
+      "$GITLAB_API/projects/$ID" \
+      && echo " ✓ OK" || echo " ✗ Failed"
+  done
+
+  (( PAGE++ ))
+done
+
+echo "All done!"
